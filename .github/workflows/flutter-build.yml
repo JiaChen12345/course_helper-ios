@@ -5,29 +5,30 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        default: ios
+        type: choice
+        options:
+          - ios
+          - android
+          - all
 
 env:
   JAVA_VERSION: "17"
 
 jobs:
-  build:
-    name: Build All Platforms
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        # os: [ubuntu-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            platform: android
-          # - os: macos-latest
-          #   platform: ios
+  build-android:
+    name: Build Android
+    if: github.event_name == 'push' || inputs.platform == 'android' || inputs.platform == 'all'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java (Android only)
-        if: matrix.platform == 'android'
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -53,8 +54,7 @@ jobs:
           echo "APP_VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Using app version: $VERSION"
 
-      - name: Setup Android signing (Android only)
-        if: matrix.platform == 'android'
+      - name: Setup Android signing
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/anerycoft.jks
           echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
@@ -63,11 +63,9 @@ jobs:
           echo "storeFile=../anerycoft.jks" >> android/key.properties
 
       - name: Build Android APK (split-per-abi)
-        if: matrix.platform == 'android'
         run: flutter build apk --release --split-per-abi
 
       - name: Rename APKs
-        if: matrix.platform == 'android'
         run: |
           VERSION="${{ steps.version.outputs.APP_VERSION }}"
           cd build/app/outputs/flutter-apk
@@ -78,33 +76,67 @@ jobs:
           ls -l
 
       - name: Upload Android artifacts
-        if: matrix.platform == 'android'
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/CourseHelper_*.apk   # 匹配重命名后的文件
           if-no-files-found: error
 
-      # - name: Build iOS
-      #   if: matrix.platform == 'ios'
-      #   run: |
-      #     flutter build ios --release --no-codesign
-      #     cd build/ios/iphoneos
-      #     mkdir Payload
-      #     cp -r Runner.app Payload/
-      #     zip -r CourseHelper.ipa Payload
+  build-ios:
+    name: Build unsigned iOS IPA
+    if: github.event_name == 'push' || inputs.platform == 'ios' || inputs.platform == 'all'
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # - name: Upload iOS artifacts
-      #   if: matrix.platform == 'ios'
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ios-ipa
-      #     path: build/ios/iphoneos/CourseHelper.ipa
-      #     if-no-files-found: error
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: "true"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Using app version: $VERSION"
+
+      - name: Build iOS without code signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Package and verify unsigned IPA
+        run: |
+          VERSION="${{ steps.version.outputs.APP_VERSION }}"
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          IPA_DIR="build/ios/ipa"
+          IPA_PATH="$IPA_DIR/CourseHelper_${VERSION}_unsigned.ipa"
+
+          test -d "$APP_PATH"
+          rm -rf "$IPA_DIR"
+          mkdir -p "$IPA_DIR/Payload"
+          ditto "$APP_PATH" "$IPA_DIR/Payload/Runner.app"
+          (
+            cd "$IPA_DIR"
+            /usr/bin/zip -qry "$(basename "$IPA_PATH")" Payload
+            /usr/bin/unzip -l "$(basename "$IPA_PATH")" | grep -q 'Payload/Runner.app/'
+          )
+          ls -lh "$IPA_PATH"
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/CourseHelper_*_unsigned.ipa
+          if-no-files-found: error
 
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [build-android, build-ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -140,7 +172,7 @@ jobs:
         with:
           files: |
             release-assets/android-apk/*.apk
-            # release-assets/ios-ipa/CourseHelper.ipa
+            release-assets/ios-ipa/CourseHelper_*_unsigned.ipa
           name: Release ${{ steps.get_version.outputs.VERSION }}
           tag_name: ${{ steps.get_version.outputs.VERSION }}
           body: ${{ env.TAG_MSG }}

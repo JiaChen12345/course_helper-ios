@@ -27,9 +27,17 @@
 | 平台        | 状态    | 说明                       |
 |-----------|-------|--------------------------|
 | Android   | 可用    | 在 Release 中获取安装包         |
-| iOS       | 需自行构建 | 缺少证书，需自行配置后构建            |
+| iOS       | 可自签安装 | GitHub Actions 生成未签名 IPA，使用 Sideloadly 安装 |
 | Windows   | 需自行构建 | 部分功能（如扫描二维码）暂不可用         |
 | HarmonyOS | 需自行构建 | 可使用 HarmonyFlutterSDK 构建 |
+
+### iPhone 自签安装
+
+无需 Mac 或付费开发者账号。前往 GitHub Actions 手动运行 `Flutter Build and Release`，下载 `ios-ipa` 构建产物，再按照 [Windows + Sideloadly 安装教程](docs/ios-sideload.md) 使用个人 Apple ID 签名并安装。
+
+免费 Apple ID 的签名通常有效 7 天，到期前可使用 Sideloadly 自动刷新或重新安装。请勿将 Apple ID、密码或验证码填写到 GitHub Secrets 或交给他人。
+
+如果分发修改后的 IPA，必须依照 GPLv3 同时提供完整对应源码并保留原始版权声明。
 
 ## 致谢
 - [Yuuki](https://github.com/SoyBeanMilkx) 提供学习通脱壳包
