@@ -68,7 +68,7 @@
 
 | 决策点 | 选择 | 理由 |
 |---|---|---|
-| iOS 构建环境 | GitHub 托管 macOS runner | Xcode 只能在 macOS 构建，用户无需拥有 Mac |
+| iOS 构建环境 | GitHub 托管 macOS runner + Flutter 3.41.8 | Xcode 只能在 macOS 构建；固定项目声明的 Flutter/Dart 版本可避免 runner 更新后自动迁移工程 |
 | 签名阶段 | 云端不签名，本机 Sideloadly 签名 | 不向 GitHub 上传 Apple 凭据，适配免费个人签名 |
 | 作业结构 | Android 与 iOS 独立作业 | 故障隔离清楚，也便于分别下载和维护 |
 | IPA 打包 | 标准 Payload 目录后压缩 | Sideloadly 可识别，且结构可直接验证 |
