@@ -1,3 +1,4 @@
+# Builds unsigned iOS artifacts for local Sideloadly signing.
 name: Flutter Build and Release
 
 on:
